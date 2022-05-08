@@ -11,6 +11,22 @@ namespace config {
 constexpr std::size_t chunk_size{64};
 constexpr std::size_t threads_per_op{16};
 constexpr std::size_t operation_iterations{10'000};
+
+const auto worker_wrapper = [](std::atomic<bool> &start_signal, auto operation,
+                               auto... operation_arguments) {
+  start_signal.wait(false);
+  for (std::size_t ii{0}; ii != operation_iterations; ++ii)
+    operation(std::unwrap_reference_t<decltype(operation_arguments)>(
+        operation_arguments)...);
+};
+
+const auto operation_emplace = [](auto &list) { list.emplace(1); };
+const auto operation_pop = [](auto &list) { auto value = list.pop(); };
+const auto operation_iterate = [](auto &list) {
+  std::size_t cache{};
+  for (const auto &value : list)
+    cache = value;
+};
 } // namespace config
 
 TEST_CASE("lock_free::list single threaded consistency", "[lock_free][list]") {
@@ -24,28 +40,17 @@ TEST_CASE("lock_free::list single threaded consistency", "[lock_free][list]") {
 }
 
 TEST_CASE("lock_free::list thread safety", "[lock_free][list][thread]") {
-
   std::atomic<bool> start_signal{false};
   lock_free::list<int> list{config::chunk_size};
 
-  const auto worker_wrapper = [&start_signal](auto operation) {
-    start_signal.wait(false);
-    for (std::size_t ii{0}; ii != config::operation_iterations; ++ii)
-      operation();
-  };
-  const auto operation_emplace = [&list] { list.emplace(1); };
-  const auto operation_pop = [&list] { auto value = list.pop(); };
-  const auto operation_iterate = [&list] {
-    std::size_t cache{};
-    for (const auto &value : list)
-      cache = value;
-  };
-
   std::vector<std::thread> threads{};
   for (int ii{0}; ii != config::threads_per_op; ++ii) {
-    threads.emplace_back(worker_wrapper, operation_emplace);
-    threads.emplace_back(worker_wrapper, operation_pop);
-    threads.emplace_back(worker_wrapper, operation_iterate);
+    threads.emplace_back(config::worker_wrapper, std::ref(start_signal),
+                         config::operation_emplace, std::ref(list));
+    threads.emplace_back(config::worker_wrapper, std::ref(start_signal),
+                         config::operation_pop, std::ref(list));
+    threads.emplace_back(config::worker_wrapper, std::ref(start_signal),
+                         config::operation_iterate, std::ref(list));
   }
 
   start_signal = true;
@@ -60,16 +65,10 @@ TEST_CASE("lock_free::list emplace thread consistency",
   std::atomic<bool> start_signal{false};
   lock_free::list<int> list{config::chunk_size};
 
-  const auto worker_wrapper = [&start_signal](auto operation) {
-    start_signal.wait(false);
-    for (std::size_t ii{0}; ii != config::operation_iterations; ++ii)
-      operation();
-  };
-  const auto operation_emplace = [&list] { list.emplace(1); };
-
   std::vector<std::thread> threads{};
   for (int ii{0}; ii != config::threads_per_op; ++ii) {
-    threads.emplace_back(worker_wrapper, operation_emplace);
+    threads.emplace_back(config::worker_wrapper, std::ref(start_signal),
+                         config::operation_emplace, std::ref(list));
   }
 
   start_signal = true;
@@ -95,13 +94,7 @@ TEST_CASE("lock_free::list pop thread consistency",
        ii != config::threads_per_op * config::operation_iterations; ++ii)
     list.emplace(ii);
 
-  const auto worker_wrapper = [&start_signal](auto operation) {
-    start_signal.wait(false);
-    for (std::size_t ii{0}; ii != config::operation_iterations; ++ii)
-      operation();
-  };
-
-  const auto operation_pop = [&error_count, &list] {
+  const auto operation_pop = [](auto &list, auto &error_count) {
     if (list.pop() == list.end())
       // Report error if no more elements are in the list.
       // There should be exactly enough.
@@ -110,7 +103,8 @@ TEST_CASE("lock_free::list pop thread consistency",
 
   std::vector<std::thread> threads{};
   for (int ii{0}; ii != config::threads_per_op; ++ii) {
-    threads.emplace_back(worker_wrapper, operation_pop);
+    threads.emplace_back(config::worker_wrapper, std::ref(start_signal),
+                         operation_pop, std::ref(list), std::ref(error_count));
   }
 
   start_signal = true;
