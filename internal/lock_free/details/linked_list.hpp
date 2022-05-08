@@ -39,18 +39,18 @@ constexpr lock_free::details::linked_list<Value>::linked_list() noexcept
 template <typename Value>
 void lock_free::details::linked_list<Value>::push(node_type &nodes) {
   auto &last = nodes.last();
-  last.next = root.load(std::memory_order_consume);
+  last.next = root.load(std::memory_order_acquire);
   while (!root.compare_exchange_weak(
-      last.next, &nodes, std::memory_order_release, std::memory_order_acquire))
+      last.next, &nodes, std::memory_order_seq_cst, std::memory_order_acquire))
     ;
 }
 
 template <typename Value>
 auto lock_free::details::linked_list<Value>::pop() -> node_type * {
-  auto expected_root = root.load(std::memory_order_consume);
+  auto expected_root = root.load(std::memory_order_acquire);
   while (expected_root &&
          !root.compare_exchange_weak(expected_root, expected_root->next,
-                                     std::memory_order_release,
+                                     std::memory_order_seq_cst,
                                      std::memory_order_acquire))
     ;
   if (expected_root)
@@ -60,5 +60,5 @@ auto lock_free::details::linked_list<Value>::pop() -> node_type * {
 
 template <typename Value>
 auto lock_free::details::linked_list<Value>::pop_all() -> node_type * {
-  return root.exchange(nullptr, std::memory_order_acquire);
+  return root.exchange(nullptr);
 }
