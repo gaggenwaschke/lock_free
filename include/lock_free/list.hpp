@@ -49,7 +49,6 @@ public:
     list_type &list;
 
     node_type *first;
-    node_type *last;
     inner_iterator_type inner_iterator;
   };
 
@@ -103,22 +102,14 @@ private:
 template <typename Value, typename ValueAllocator, typename ChunkNodeAllocator>
 lock_free::list<Value, ValueAllocator, ChunkNodeAllocator>::iterator::iterator(
     list_type &list, node_type *begin_node) noexcept
-    : list{list}, first{begin_node}, last{nullptr}, inner_iterator{begin_node} {
-}
+    : list{list}, first{begin_node}, inner_iterator{begin_node} {}
 
 template <typename Value, typename ValueAllocator, typename ChunkNodeAllocator>
 lock_free::list<Value, ValueAllocator,
                 ChunkNodeAllocator>::iterator::~iterator() {
-  if (last) {
-    // Split list into used and unused nodes.
-    last->next = nullptr;
-    // Return used nodes.
-    list.free_nodes.push(*first);
-  }
-
   if (inner_iterator != std::end(*first)) {
     // Return unused nodes
-    list.active_nodes.push(*inner_iterator);
+    list.free_nodes.push(*first);
   }
 }
 
@@ -132,7 +123,6 @@ auto lock_free::list<Value, ValueAllocator,
 template <typename Value, typename ValueAllocator, typename ChunkNodeAllocator>
 auto lock_free::list<Value, ValueAllocator,
                      ChunkNodeAllocator>::iterator::operator++() -> iterator & {
-  last = &(*inner_iterator);
   ++inner_iterator;
   return *this;
 }

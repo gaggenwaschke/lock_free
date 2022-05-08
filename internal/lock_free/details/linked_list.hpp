@@ -60,5 +60,5 @@ auto lock_free::details::linked_list<Value>::pop() -> node_type * {
 
 template <typename Value>
 auto lock_free::details::linked_list<Value>::pop_all() -> node_type * {
-  return root.exchange(nullptr);
+  return root.exchange(nullptr, std::memory_order_acq_rel);
 }
