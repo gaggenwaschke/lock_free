@@ -3,12 +3,9 @@
 #include <lock_free/list.hpp>
 
 #include <atomic>
-#include <chrono>
 #include <mutex>
 #include <thread>
 #include <vector>
-
-using std::chrono_literals::operator""ms;
 
 namespace config {
 constexpr std::size_t chunk_size{64};
@@ -116,7 +113,6 @@ TEST_CASE("lock_free::list pop thread consistency",
     threads.emplace_back(worker_wrapper, operation_pop);
   }
 
-  std::this_thread::sleep_for(10ms);
   start_signal = true;
   start_signal.notify_all();
 
